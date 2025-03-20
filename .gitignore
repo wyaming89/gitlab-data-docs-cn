@@ -15,5 +15,5 @@ ENV/
 *.swo
 
 # Project specific
-data/
+# data/
 
