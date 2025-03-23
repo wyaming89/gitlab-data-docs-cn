@@ -18,7 +18,7 @@
 │   └── translate/        # 翻译相关脚本
 │       └── translate_docs.py  # 文档翻译主脚本
 ├── .env.example         # 环境变量配置模板
-└── requirements.txt     # Python 依赖包
+└── pyproject.toml       # 项目配置和依赖管理
 ```
 
 ## 文档概述
@@ -83,23 +83,32 @@
 git clone https://github.com/wyaming89/gitlab-data-docs-cn.git
 ```
 
-2. 安装依赖：
+2. 安装 uv 工具（如果尚未安装）：
 ```bash
-pip install -r requirements.txt
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-3. 配置环境变量：
+3. 安装依赖：
+```bash
+uv venv
+source .venv/bin/activate  # Linux/macOS
+# 或
+.venv\Scripts\activate  # Windows
+uv pip install -e .
+```
+
+4. 配置环境变量：
 ```bash
 cp .env.example .env
 # 编辑 .env 文件，添加您的 Deepseek API 密钥
 ```
 
-4. 运行翻译脚本：
+5. 运行翻译脚本：
 ```bash
 python src/translate/translate_docs.py
 ```
 
-5. 查看文档：
+6. 查看文档：
 ```bash
 cd docs/zh-CN
 ```

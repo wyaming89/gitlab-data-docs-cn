@@ -3,12 +3,13 @@
 
 import os
 import json
-import requests
 from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 import markdown
 import re
+import asyncio
+from openai import OpenAI
 
 # 加载环境变量
 load_dotenv()
@@ -19,70 +20,66 @@ class DeepseekTranslator:
         if not self.api_key:
             raise ValueError("请在 .env 文件中设置 DEEPSEEK_API_KEY")
         
-        self.api_url = "https://api.deepseek.com/v1/chat/completions"
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.deepseek.com"
+        )
 
-    def translate_text(self, text):
+    async def translate_text(self, text):
         """使用 Deepseek API 翻译文本"""
-        prompt = f"""请将以下英文文本翻译成中文，保持专业性和准确性：
-
-{text}
-
-请直接返回翻译结果，不要包含任何解释或其他内容。"""
-
-        data = {
-            "model": "deepseek-chat",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3
-        }
+        messages = [
+            {
+                "content": """你是一个专业的翻译助手，请将内容翻译成中文。
+请遵循以下规则：
+1. 保持 Markdown 格式不变
+2. 保持代码块、标题、列表等特殊格式不变
+3. 保持专业术语的准确性
+4. 翻译要通顺自然
+5. 不要添加任何解释或注释
+6. 直接返回翻译后的文本
+7. 确保返回的是中文内容""",
+                "role": "system"
+            },
+            {
+                "content": text,
+                "role": "user"
+            }
+        ]
 
         try:
-            response = requests.post(self.api_url, headers=self.headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            return result['choices'][0]['message']['content'].strip()
+            print("发送翻译请求...")
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                temperature=0.3,
+                max_tokens=4096,
+                stream=False
+            )
+            
+            translated_text = response.choices[0].message.content.strip()
+            
+            # 检查翻译结果是否包含中文
+            if not any('\u4e00' <= char <= '\u9fff' for char in translated_text):
+                print("警告：翻译结果似乎不包含中文字符！")
+                print("翻译结果预览:", translated_text[:200])
+                return text  # 如果翻译结果不包含中文，返回原文
+            
+            return translated_text
         except Exception as e:
             print(f"翻译出错: {str(e)}")
+            print("错误详情:", e.__class__.__name__)
             return text
 
-    def translate_markdown(self, content):
-        """翻译 Markdown 内容，保持格式"""
-        # 分割 Markdown 内容为段落
-        paragraphs = content.split('\n\n')
-        translated_paragraphs = []
+    async def translate_markdown(self, content):
+        """翻译整个 Markdown 文档"""
+        print("开始翻译文档...")
+        print("文档长度:", len(content), "字符")
+        translated_content = await self.translate_text(content)
+        print("翻译完成")
+        print("翻译后长度:", len(translated_content), "字符")
+        return translated_content
 
-        for paragraph in tqdm(paragraphs, desc="翻译进度"):
-            if not paragraph.strip():
-                translated_paragraphs.append(paragraph)
-                continue
-
-            # 检查是否是代码块
-            if paragraph.startswith('```'):
-                translated_paragraphs.append(paragraph)
-                continue
-
-            # 检查是否是标题
-            if paragraph.startswith('#'):
-                translated_paragraphs.append(paragraph)
-                continue
-
-            # 检查是否是列表项
-            if paragraph.strip().startswith(('-', '*', '+')):
-                translated_paragraphs.append(paragraph)
-                continue
-
-            # 翻译普通文本
-            translated = self.translate_text(paragraph)
-            translated_paragraphs.append(translated)
-
-        return '\n\n'.join(translated_paragraphs)
-
-def process_markdown_files():
+async def process_markdown_files():
     """处理 data/markdown 目录下的所有 Markdown 文件"""
     translator = DeepseekTranslator()
     markdown_dir = Path("data/markdown")
@@ -100,7 +97,7 @@ def process_markdown_files():
             content = f.read()
         
         # 翻译内容
-        translated_content = translator.translate_markdown(content)
+        translated_content = await translator.translate_markdown(content)
         
         # 创建相对路径
         relative_path = md_file.relative_to(markdown_dir)
@@ -116,4 +113,4 @@ def process_markdown_files():
         print(f"已保存翻译文件: {output_path}")
 
 if __name__ == "__main__":
-    process_markdown_files() 
+    asyncio.run(process_markdown_files()) 
